@@ -4,6 +4,12 @@ MscA program_Classroom Teaching SAS Code
 # Association Rule Discovery Defined :
 The rules are expressed as “if item A is part of a transaction, then item B is also part of the transaction X percent of the time.” where 0 < X ≤ 100.
 
+# Three importance evaluation criteria: 
+The strengh of an association rule is defined by its confidence factor, which is the percentage of cases in which a consequent appears with a given antecedent; 
+The level of support is how frequently the combination occurs in the market basket (database); 
+Lift is equal to the confidence factor divided by the expected confidence; 
+A credible rule has a large relative confidence factor, a relatively large level of support, and a value of lift greater than 1. Rules with a high level of confidence but little support should be interpreted with caution. 
+
 # Support: 
 Support is the percentage of transactions that contain an itemset X: Pr(𝑋)=100%×𝑁x/𝑁 where 𝑁x is number of transactions that contain an itemset, N is the total number of transactions, support indicates the rate of occurance (relative frequency) of an itemset
 
@@ -33,14 +39,17 @@ Apriori algorithm proceeds in two stages:
 
 
 # SAS Syntax 
+# The ASSOC Procedure:  
+PROC ASSOC DATA=data-set-name <options>; # DATA = data-set-name, DMDBCAT = catalog-name, OUT = data-set-name, DMDB (must specify this option if input data set is the output data set from the DMDB procedure),  ITEMS = number(maximum number of events or transactions to associate together), PCTSUP = number (minimum level of support that is needed to claim that the items are associated, refers to the largest single item frequency), SUPPORT = number (minimum number of transactions that must occur in order to accept a rule, if rules not met with this suport level, then it's rejected. Positive integer, default is 5% of the greatest item frequency count.);
 
-PROC ASSOC DATA=data-set-name <options>; # DATA = data-set-name, DMDBCAT = catalog-name, OUT = data-set-name, DMDB,  ITEMS = number, PCTSUP = number, SUPPORT = number;
 CUSTOMER list-of-variables;
-TARGET variable;
+TARGET variable; # identifies a nominal variable that contains the purchased items and is usually ordered by customers. 
 
-# Create Rules from Itemsets 
-PROC RULEGEN IN = data-set-name
-	     OUT = data-set-name
+# The Rulegen Procedure: 
+The rulegen procecure generates association rules based on the output of the ASSOC procedure, and computes statistics, such as confidence and lift for these rules. ASSOC identifies sets of items that are related, the RULEGEN discovers the rules that govern these assocations. 
+ 
+PROC RULEGEN IN = data-set-name   # the input data set is the output data set from the ASSOC procedure
+	     OUT = data-set-name <options>;  # only rules that meet the minimum confidence value MINCONF are saved in this data set. 
 	     MINCONF = number;     # specifies the minimum confidence level that is necessary to generate a rule, default value is 10. 
 RUN;
 
@@ -127,6 +136,27 @@ Cons:
 Easily generate many rules with a small number of items
 Rules can be cyclic, i.e., A & B → C, A & C → B, and B & C → A
 Need to filter out rules if particular items are wanted in the consequent 
+
+
+# Example
+/* Run the DMDB Procedure */ 
+proc dmdb batch data=sampsio.assocs    dmdbcat=catRule;    id customer time;    
+class product(desc); 
+run; 
+
+/* Run the ASSOC Procedure */ 
+proc assoc data=sampsio.assocs    dmdbcat=catRule out=assocOut    
+items=5 support=20;    
+customer customer;    
+target product; 
+run; 
+
+/*This code creates the data sets that are necessary to run the RULEGEN procedure*/
+/*Run the RULEGEN Procedure */ 
+proc rulegen in=assocOut    
+out=ruleOut 
+minconf=75; 
+run;
 
 
 
