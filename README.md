@@ -15,9 +15,9 @@ Expected Confidence is, essentially, the support of itemset Y: Pr(𝑌), If occu
 
 # Lift: 
 Lift is the ratio of the Confidence to Expected Confidence. Mathematically, lift value is:Pr(𝑌|𝑋)∕Pr(𝑌)  = Pr(𝑋 and 𝑌)∕(Pr(𝑋)×Pr(𝑌)) Lift indicates the effectiveness of the association rule over an independent assumption
-> 1 :  the association rule is credible and occurrence of itemset X increases occurrence of itemset Y (Pr(𝑌|𝑋)>Pr(𝑌)) 
-= 1 : the association rule is not credible and occurrence of itemset Y is independent of occurrence of itemset X (Pr(𝑌|𝑋)=Pr(𝑌)) 
-< 1 : the association rule is also credible but occurrence of itemset X actually prohibit occurrence of itemset Y (Pr(𝑌|𝑋)< Pr(Y))
+ > 1 :  the association rule is credible and occurrence of itemset X increases occurrence of itemset Y (Pr(𝑌|𝑋)>Pr(𝑌)) 
+ = 1 : the association rule is not credible and occurrence of itemset Y is independent of occurrence of itemset X (Pr(𝑌|𝑋)=Pr(𝑌)) 
+ < 1 : the association rule is also credible but occurrence of itemset X actually prohibit occurrence of itemset Y (Pr(𝑌|𝑋)< Pr(Y))
 
 # Maximum Number of Association Rules: 
 Given m unique items in universal set I:
@@ -105,6 +105,29 @@ run;
 proc print data = WK1DATA.rule_out;
    where (_LHAND eq "A & C");
 run;
+
+# Use bubble statement in PROC SGPLOT to use LIFT to indicate size of the bubbles. 
+proc sgplot data = WK1DATA.rule_out;
+   where (missing(CONF) eq 0);
+   bubble x = CONF y = SUPPORT size = LIFT;
+   xaxis grid values = (0 to 100 by 5);
+   yaxis grid values = (10 to 30 by 5);
+run;
+
+
+
+
+#Pros and Cons of Association Rules
+Pros: 
+Concept of itemset is very straightforward
+Apriori algorithm performs well
+Association rules are presented as IF/THEN statements
+
+Cons: 
+Easily generate many rules with a small number of items
+Rules can be cyclic, i.e., A & B → C, A & C → B, and B & C → A
+Need to filter out rules if particular items are wanted in the consequent 
+
 
 
 
