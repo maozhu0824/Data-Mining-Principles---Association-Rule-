@@ -18,6 +18,36 @@
 # Expected Confidence is the support of the consequent itemset.
 # Lift is the ratio obtained by dividing the confidence of the sequence rule by the support of the consequent.
 
+# Association Rules in PROC ASSOC
+# 1. Statements of the DMDB procedure:
+PROC DMDB DATA=data-set-name <options>;
+	CLASS list-of-variables <option>;
+	FREQ variable;
+	ID list-of-variables;
+	TARGET list-of-variables;
+	VAR list-of-variables;
+RUN;
+
+# 2. Statements of the ASSOC procedure:
+PROC ASSOC DATA=data-set-name <options>;
+	CUSTOMER list-of-variables;
+	TARGET list-of-variables;
+RUN;
+
+# 3. Statements of the SEQUENCE procedure:
+PROC SEQUENCE DATA=data-set-name              
+     ASSOC=data-set-name
+              DMDBCAT=catalog-name
+              <options>;
+	CUSTOMER list-of-variables;
+	TARGET variable;
+	VISIT variable </ options>;
+RUN;
+
+
+
+
+
 
 
 
