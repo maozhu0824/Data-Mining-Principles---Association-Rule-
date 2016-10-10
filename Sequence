@@ -1,1 +1,30 @@
+# Sequence Rule 
+# Sequence rule discovery digs deeper than association rule discovery by taking into account the sequence of appearance of the items;  
+# Help merchants plan their seasonal inventory.
+# Allow researcher to recognize occurrence sequence of events. 
+# Sequential rules identify items that frequently follow other items in transaction-based data. A sequential pattern is simply an ordered list of itemsets.
+# Sequence rules are based on timestamps of items bought and frequency counts of the number of times items occur alone and in combination in the database.
+# All itemsets leading to the final itemset form the antecedent sequence, and the last itemset is the consequent sequence.
+# If item A is part of a transaction at time t1, then item B is also part of the transaction at time t2 and X percent of the time (not direct causation).
+
+# Any numeric index that can represent the chronological occurrence of events or activities is the time.
+# The observed value of the index is the timestamp.
+# The analysis focuses on occurrence sequence of events to a customer instead of absolute times.
+# Size: the number of items contained in a sequence.
+# Length or Chain Count: the number of itemsets in the sequence.
+
+# Support is the percentage of customers that have the sequence of transactions
+# Confidence is the ratio obtained by dividing the support of the sequence rule by the support of the antecedent sequence.
+# Expected Confidence is the support of the consequent itemset.
+# Lift is the ratio obtained by dividing the confidence of the sequence rule by the support of the consequent.
+
+
+
+
+
+
+
+
+
+
 
