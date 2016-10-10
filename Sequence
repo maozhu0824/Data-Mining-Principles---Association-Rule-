@@ -35,13 +35,14 @@ PROC ASSOC DATA=data-set-name <options>;
 RUN;
 
 # 3. Statements of the SEQUENCE procedure:
-PROC SEQUENCE DATA=data-set-name              
-     ASSOC=data-set-name
-              DMDBCAT=catalog-name
-              <options>;
-	CUSTOMER list-of-variables;
-	TARGET variable;
-	VISIT variable </ options>;
+PROC SEQUENCE DATA=data-set-name  #input data source, separate observation for each product for each customer.              
+     ASSOC=data-set-name          #output data set from the ASSOC procedure
+              DMDBCAT=catalog-name    #specifies the metadata catalog for the input data source
+              <options>;   #Optional: NITEMS=number(maximum number of events that are possible for each rule, positive integer); SUPPORT = number(minimum number of customers for a rule to be accepted, default is 2%, positive integer); 
+	                    OUT= data-set-name(output dataset)           
+	CUSTOMER list-of-variables;  
+	TARGET variable; 
+	VISIT variable </ options>; #timestamp,numeric values. 
 RUN;
 
 
