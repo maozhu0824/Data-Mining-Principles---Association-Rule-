@@ -20,6 +20,7 @@
 
 # Association Rules in PROC ASSOC
 # 1. Statements of the DMDB procedure:
+
 PROC DMDB DATA=data-set-name <options>;
 	CLASS list-of-variables <option>;
 	FREQ variable;
@@ -42,11 +43,60 @@ PROC SEQUENCE DATA=data-set-name  #input data source, separate observation for e
 	                    OUT= data-set-name(output dataset)           
 	CUSTOMER list-of-variables;  
 	TARGET variable; 
-	VISIT variable </ options>; #timestamp,numeric values. 
+	VISIT variable </ options>; #timestamp,numeric values. Optional: SAME=same-number(lower time limit between two events, if less, then treated as occured at the same time) 
+	                                                                 WINDOW=window-number(upper time limit, if larger, will not be considered for a rule count)
 RUN;
 
+# Example: 
+proc dmdb data = Week2.SequenceExample dmdbcat = d;
+   id Customer;
+   class Item;
+   var Visit;
+   target Item;
+run;
+
+proc assoc data = Week2.SequenceExample dmdbcat = d
+           out = Week2.assoc_out items = 4 support = 1;  /* Up to 4-itemset, minimum support is 1 customer */
+   customer ;
+   target Item;
+run;
+
+proc sequence data = Week2.SequenceExample
+              assoc = Week2.assoc_out dmdbcat = d
+              out = Week2.sequence_out nitems = 4        /* Up to chain length of 4 */
+              support = 1;                               /* Minimum support is 1 customer */
+   customer ;
+   target Item;
+   visit / same = '00:09:59't;  /* Same time if difference in Visit is less than 10 minutes */
+run;
 
 
+# Sort the rules:
+# 1. First by Confidence in descending order,
+# 2. Second by Support in descending order, and
+# 3. Third by Lift in descending order.
+# The objective is to find highly confident rules that are popular and also predictive.
+# If your objective is to find rare rules that are predictive, then you will sort Support in ascending order.
+
+proc sort data = Week2.Sequence_out;
+   by descending CONF descending SUPPORT descending PSEUDOLIFT;
+run;
+
+
+# Plot the result: 
+# Plot Support versus Confidence in a scatterplot.
+# Bubble size and color are proportional to Lift
+
+proc sgplot data = Week2.Sequence_out;
+   bubble x = CONF y = SUPPORT size = PSEUDOLIFT / colorresponse = PSEUDOLIFT;
+   xaxis grid values = (20 to 100 by 5);
+   yaxis grid values = (15 to 50 by 5);
+run; 
+
+
+# Pros: 1. Concept of sequence is very straightforward; 2. Algorithm performs well; 3.Sequence rules are presented as IF/THEN statements
+# Cons: 1. Routinely generate many rules with a small number of items; 2. Rules can only predict an itemset will occur in the next visit without telling when (e.g., next Saturday) the next visit will happen.
+3. Do not consider monetary values of items in the purchase sequence. 
 
 
 
