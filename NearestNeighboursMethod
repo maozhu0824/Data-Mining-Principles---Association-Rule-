@@ -104,7 +104,7 @@ PROC PMBR DATA=data-set-name   # identifies input data set, each observation mus
      DMDBCAT=data-set-name <options>; # specified the metadata catalog for the input data source 
      K = number #optional: specifies the number of neighbors to retrieve for each observation, must be positive integer, default is 1
      OPTIMIZEK #requests to determine the optimal value for K, if specifies this and K=value, then K=value is considered maximum acceptablev value for K
-     NEIGHBORS #add_N1,...,_NK to output dataset, contains identifiers: specified ID or observation sequence number
+     NEIGHBORS #add_N1,...,_NK to output dataset, contains identifiers: specified ID or observation sequence number, print out neighbors
      METHOD = SCAN/RDTREE #specifies data representation, computational performance consideration, default is RDTREE, use SCAN instead.
    ID variable; # variable whose values will uniquely identify the observations
    SCORE DATA=data-set-name <options>; 
@@ -114,6 +114,108 @@ PROC PMBR DATA=data-set-name   # identifies input data set, each observation mus
    TARGET variable; # whose values are used to compute predicted values.
    VAR list-of-variables; #dimensions for the nearest neighbor search, standardized and orthogonal, if not specified, all numeric values
 RUN;
+
+# For an interval target, the optimal value is the smallest number of neighbors that corresponds to the largest correlation 
+between the actual target variable and the predicted target variable in the training data set. 
+# For a categorical target, the optimal value of K is the smallest number of neighbors that corresponds to the largest sum of 
+posterior probabilities at the level of the target variable in the training data set.
+
+
+Example: 
+# 1. Create an ID variable called CaseID by concatenating the Make and the observation number, separated by ‘_’.
+DATA ToyMBR;
+      SET sashelp.cars;
+      LENGTH CaseID $ 32;
+      RETAIN counter 0;
+      counter + 1;
+      CaseID = CATX('_', Make, PUT(counter, BEST32.-l));   # best format and align to the left, Acura_1
+      KEEP CaseID Invoice Origin Cylinders Horsepower Weight;
+   RUN;
+
+# 2. Call DMDB procedure to normalize values, generate metadata, and create the DMDB catalog.
+PROC DMDB DATA = ToyMBR DMDBCAT = d;
+      ID CaseID;
+      VAR Invoice Cylinders Horsepower Weight;
+      CLASS Origin;
+      TARGET Invoice;
+   RUN;
+   
+# 3. Call PMBR procedure to find the optimal number of neighbors, and score the input data to find the neighbors.
+PROC PMBR DATA = ToyMBR DMDBCAT = d METHOD = scan 
+             K = 20 OPTIMIZEK NEIGHBORS;
+      ID CaseID;
+      VAR Cylinders Horsepower Weight;
+      CLASS Origin;
+      TARGET Invoice;
+      SCORE DATA = ToyMBR ROLE = TRAIN OUT = ToyMBR_Neighbors;
+   RUN;
+
+
+# Visualize distributions and correlations of numeric input variables
+PROC SGSCATTER DATA = ToyMBR;
+     MATRIX Cylinders Horsepower Weight
+     / DIAGONAL = (HISTOGRAM);
+  RUN;
+
+# Orthonormalize Variables
+# Use the PRINCOMP procedure to create principal components from the input numeric variables
+# The output principal components will have unit variances and zero correlations.
+# How many: first elbow in Scree Plot 
+
+# STANDARD: standardizes the principal component scores in the OUT= data set to unit variance.
+# N: number of principal components to write to the OUT= data set
+PROC PRINCOMP DATA = ToyMBR STANDARD
+              N = 3 OUT = ToyMBR_PC;
+   ID CaseID;
+   VAR Cylinders Horsepower Weight;
+RUN;
+ 
+# Use CORR procedure to spot check principal components
+PROC CORR DATA = ToyMBR_PC;
+  VAR Prin1 Prin2 Prin3;
+RUN;
+
+# PMBR using Orthonormalized Variables
+PROC DMDB DATA = ToyMBR_PC DMDBCAT = d;
+   ID CaseID;
+   VAR Invoice Prin1 Prin2;
+   CLASS Origin;
+   TARGET Invoice;
+RUN;
+
+PROC PMBR DATA = ToyMBR_PC DMDBCAT = d METHOD = SCAN 
+          K = 20 OPTIMIZEK NEIGHBORS;
+   ID CaseID;
+   VAR Prin1 Prin2 ;
+   CLASS Origin;
+   TARGET Invoice;
+   SCORE DATA = ToyMBR_PC ROLE = TRAIN OUT = ToyMBR_Neighbors;
+RUN;
+
+#Pros
+# It produces results that are readily understandable. It is applicable to categorical and interval inputs. It works efficiently on
+almost any number of variables. Maintaining the training set requires a minimal amount of effort.
+
+#Cons
+# It practically needs to carry the entire data set along for scoring. Results can vary depending on your choice of number of neighbors, 
+handling of discrete numerical variables, and decision to orthonormalize interval inputs. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
