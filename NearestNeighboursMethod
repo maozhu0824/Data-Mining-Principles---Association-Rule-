@@ -1,6 +1,130 @@
 # Memory Based Reasoning
 # Important Concepts: 
-# Memory Based: 
+
+# Reasoning: 
 # Neighbors: similar observations from historical data or experience 
 # Distance Function: assign a numeric distance between any two observations 
+# Identify neighbors that have qualities or categorical features in common with or continuous quantities closely resemble the 
+probe (i.e., current case)
+# Applying the information from these similar cases to the problem at hand 
+# Uses the neighbors forclassification or prediction
+
+#Algorithm: 
+# Memorizes a fixed number of observations in training data, identify the observations that most resemble attributes of the probe, and
+summarize neighbors using central tendency statistics: mode of neighbours for classification, mean or median of neighbours for prediction. 
+
+# K-nearest neighbors(KNN)Algorithms: 
+# Observations in the training dataset; A distance metric to compute distance between observations; The integer value k which is the number
+of nearest neighbors to retrieve
+# Classify or predict for an arbitrary observation, compute distance to all observations in training dataset, identify k observations with
+shortest distances, uses these k neighbours for classification or prediction 
+
+# Distance Matric: Xiv-vth input variable in i-th case, Xjv-vth input variable in j-th case; Distance works only on interval predictors,
+dummy variables have to be created for nominal or ordinal predictors first. 
+
+# Optionally Scaling of Input Variables: Perform principal component analysis to scale or transform input (excluding target) variables 
+into orthonormal components.Any two orthonormal components have zero correlation, all orthonormal components have same variance. 
+# Two reasons to scale or orthonormalize the input variables: Avoid highly correlated input variables to contribute unnecessary addition
+Grid Search for the Number of Neighbors:
+Select a range of integers, say 1 ≤ k ≤ 20
+Choose the lower bound based on your idea of the minimum number of neighbors to make up a community
+Choose the upper bound according to your ability to comprehend that many number of neighbors
+Run nearest neighbors algorithm for each value of k and obtain predicted values of target variable
+Select your value of k such that the predicted values are most correlated with the observed values of target variable
+to the distance metric; Avoid input variables that have relatively large absolute values to exert unwanted leverages on the results. 
+
+
+
+# Orthonormal Transformation in SAS/IML
+proc iml;
+x = {5.1 160 82000,
+     5.2 170 84000,
+     5.3 180 86000,
+     5.4 190 88000,
+     5.5 200 90000,
+     5.6 110 81000,
+     5.7 120 83000,
+     5.8 130 85000,
+     5.9 140 87000,
+     6.0 150 89000};
+print x;
+
+nrowx = nrow(x);
+ncolx = ncol(x);
+print nrowx;
+print ncolx;
+
+xtx = t(x) * x;
+print xtx;
+
+/* Eigenvalue decomposition */
+call eigen (evals, evecs, xtx);
+print evals;
+print evecs;
+
+/* Here is the transformation matrix */
+transf = evecs * inv(sqrt(diag(evals)));
+print transf;
+
+/* Here is the transformed X */
+transf_x = x * transf;
+print transf_x;
+
+/* Check columns of transformed X */
+xtx = t(transf_x) * transf_x;
+print xtx;
+
+quit;
+
+
+# Number of Neighbors Matics - k
+# The k value must be an integer greater than zero, the choice can be subjective. 
+# If k is too small (say 1), then results are either sensitive to noise observations or biased.
+# If k is too large (say 50), then neighborhood may include observations which may cause more distraction than adding information.
+# Grid Search for the Number of Neighbors:1. Select a range of integers, say 1 ≤ k ≤ 20;  2.Choose the lower bound based on your idea 
+of the minimum number of neighbors to make up a community; 3. Choose the upper bound according to your ability to comprehend that many 
+number of neighbors; 4. Run nearest neighbors algorithm for each value of k and obtain predicted values of target variable;  5. Select 
+your value of k such that the predicted values are most correlated with the observed values of target variable. 
+
+# Result: 1. Classification: Target is categorical, Probabilities of the categories from the neighbors are calculated, The mode is the 
+predicted target value;  2. Prediction:Target is of interval type, Mean or median of the neighbors is the predicted target value. 
+
+# Memory Based Reasoning in SAS
+# PROC DMDB to prepare the data and generate metadata
+PROC DMDB DATA=data-set-name <options>;
+	CLASS list-of-variables <option>;
+	FREQ variable;
+	ID list-of-variables;
+	TARGET list-of-variables;
+	VAR list-of-variables;
+RUN;
+
+# PROC PMBR to find nearest neighbors
+PROC PMBR DATA=data-set-name   # identifies input data set, each observation must be uniquely identified by a ID variable
+     DMDBCAT=data-set-name <options>; # specified the metadata catalog for the input data source 
+     K = number #optional: specifies the number of neighbors to retrieve for each observation, must be positive integer, default is 1
+     OPTIMIZEK #requests to determine the optimal value for K, if specifies this and K=value, then K=value is considered maximum acceptablev value for K
+     NEIGHBORS #add_N1,...,_NK to output dataset, contains identifiers: specified ID or observation sequence number
+     METHOD = SCAN/RDTREE #specifies data representation, computational performance consideration, default is RDTREE, use SCAN instead.
+   ID variable; # variable whose values will uniquely identify the observations
+   SCORE DATA=data-set-name <options>; 
+   SCORE DATA = data-set-name OUT = data-set -name
+         ROLE = TRAIN/VALID/TEST/SCORE;
+         #scoring dataset and output data set, ROLE specifies role of the DATA dataset, if the same as input,then TRAIN is appropriate
+   TARGET variable; # whose values are used to compute predicted values.
+   VAR list-of-variables; #dimensions for the nearest neighbor search, standardized and orghogonal, if not specified, all numeric values
+RUN;
+
+
+
+
+
+
+
+
+
+
+
+
+
 
