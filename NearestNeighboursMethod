@@ -112,7 +112,7 @@ PROC PMBR DATA=data-set-name   # identifies input data set, each observation mus
          ROLE = TRAIN/VALID/TEST/SCORE;
          #scoring dataset and output data set, ROLE specifies role of the DATA dataset, if the same as input,then TRAIN is appropriate
    TARGET variable; # whose values are used to compute predicted values.
-   VAR list-of-variables; #dimensions for the nearest neighbor search, standardized and orghogonal, if not specified, all numeric values
+   VAR list-of-variables; #dimensions for the nearest neighbor search, standardized and orthogonal, if not specified, all numeric values
 RUN;
 
 
