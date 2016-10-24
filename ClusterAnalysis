@@ -1,0 +1,99 @@
+LIBNAME WK4 '/home/mllam/Data Mining/Week 4';
+
+PROC IMPORT DATAFILE = '/home/mllam/Data Mining/Week 4/DistanceFromChicago.xlsx'
+            OUT = WK4.DistanceFromChicago DBMS = XLSX REPLACE;
+RUN;
+
+/* Convert the two letters state code to the Federal Information Processing Standard (FIPS) number */
+DATA WK4.DistanceFromChicago;
+   SET WK4.DistanceFromChicago;
+   LENGTH State 8;
+   State = STFIPS(StateCode);
+RUN;
+
+PROC SORT DATA = WK4.DistanceFromChicago;
+   BY CITY;
+RUN;
+
+PROC CONTENTS DATA = WK4.DistanceFromChicago;
+RUN;
+
+PROC HPCLUS DATA = WK4.DistanceFromChicago
+            MAXCLUSTERS = 8 SEED = 20161018 NOC = ABC (MINCLUSTERS = 2)
+            OUTSTAT = HPCLUS_OutStat;
+   ID City;
+   INPUT DrivingMilesFromChicago / LEVEL = INTERVAL;
+   CODE FILE = '/home/mllam/Data Mining/Week 4/HPCLUS_Code.sas';
+   SCORE OUT = WK4.HPCLUS_Score;
+RUN;
+
+PROC SORT DATA = WK4.HPCLUS_Score;
+   BY City;
+RUN;
+
+DATA WK4.DistanceFromChicago;
+   MERGE WK4.DistanceFromChicago
+         WK4.HPCLUS_Score;
+   BY City;
+RUN;
+
+PROC SORT DATA = WK4.DistanceFromChicago OUT = ClusterCity;
+   BY _CLUSTER_ID_ City;
+RUN;
+
+PROC PRINT DATA = ClusterCity;
+   BY _CLUSTER_ID_;
+   VAR City;
+RUN;
+
+PROC MEANS DATA = ClusterCity N MIN MAX;
+   CLASS _CLUSTER_ID_;
+   VAR DrivingMilesFromChicago;
+RUN;
+
+
+PROC GMAP MAP = MAPS.US DATA = WK4.DistanceFromChicago;
+   ID State;
+   CHORO _CLUSTER_ID_ / DISCRETE;
+RUN;
+QUIT;
+
+PROC SGPANEL DATA = WK4.DistanceFromChicago PCTLEVEL = CELL;
+   PANELBY _CLUSTER_ID_ / ROWS = 5;
+   HISTOGRAM DrivingMilesFromChicago / BINWIDTH = 100;
+   ROWAXIS GRID;
+RUN;
+
+PROC SGPLOT DATA = WK4.DistanceFromChicago;
+   HBOX DrivingMilesFromChicago / CATEGORY = _CLUSTER_ID_;
+   YAXIS GRID;
+   XAXIS GRID VALUES = (0 to 2200 by 100);
+RUN;
+
+PROC SGPLOT DATA = WK4.DistanceFromChicago;
+   VAR StateCode / CATEGORYORDER = RESPDESC  COLORRESPONSE = _CLUSTER_ID_ 
+                   STAT = MEAN RESPONSE = DrivingMilesFromChicago;
+   GRADlEGEND "VBAR" / INTEGER;
+   XAXIS GRID FITPOLICY = STAGGER;
+   YAXIS GRID;
+RUN;
+
+proc template;
+   define statgraph MyPieChart;
+   begingraph;
+      entrytitle "Cluster Membership";
+      layout region;
+         piechart category = _CLUSTER_ID_
+                  / datalabellocation=callout
+                    categorydirection=clockwise
+                    start=90 stat=pct
+                    othersliceopts=(type=percent 
+                    percent=5 label="Other Clusters");
+      endlayout;
+   endgraph;
+   end;
+run;
+
+proc sgrender data = WK4.DistanceFromChicago
+              template = MyPieChart;
+run;
