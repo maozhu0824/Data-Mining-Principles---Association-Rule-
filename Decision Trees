@@ -31,6 +31,7 @@ node to each node. SUMMARY: A table that contains the summary of target variable
                                                                           WHOLETREE – The entire tree with additional options
                                                                     ZOOMEDTREE – A portion of the tree with additional options
 
+
 # The ID statement specifies the variable whose values will uniquely identify the observations.
 # Syntax
 ID variable;
@@ -88,8 +89,6 @@ run;
 
 
 
-variables are SAS variable names
-class-options: DESCENDING andORDER = FORMATTED | INTERNAL
 
 
 
