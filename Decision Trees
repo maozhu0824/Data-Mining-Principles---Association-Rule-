@@ -1,1 +1,100 @@
+PROC HPSPLIT <options>;
+   ID variables;
+   CLASS variables </options>;
+   MODEL response <(response-options)> = variable <variable...>;
+   GROW criterion </ options>;
+   CODE FILE = filename;
+   OUTPUT output-options;
+   PARTITION <partition-options>;
+   PERFORMANCE performance-options;
+   PRUNE prune-method <(prune-options)>;
+   RULES FILE = filename;
+
+# DATA = data-set-name (This argument identifies the input data set.Each observation must be uniquely identified by a ID variable.)
+# MAXBRANCH = positive integer (It specifies the maximum number of children nodes per a parent node.The procedure will attempt to 
+create this number of children unless it is impossible. By default, MAXBRANCH = 2 which is appropriate for CART)
+# MAXDEPTH = positive integer (It specifies the maximum depth of the tree to be grown.The default value is: MAXDEPTH = integer 
+part of (10 / log2(MAXBRANCH))If MAXBRANCH = 2, then MAXDEPTH = 10)
+# MINCATSIZE = positive integer (It specifies the minimum number of observations that a category must have in order to be considered
+in the split.By default, MINCATSIZE = 1.)
+# MINLEAFSIZE = positive integer (It specifies the minimum number of observations that a child node must have in order for the split
+to be considered.By default, MINLEAFSIZE = 1.)
+# MAXLEAVES = positive integer (It specifies the maximum number of leaf nodes in the tree to be grown.It cannot be specified together
+with MAXDEPTH.No default value)
+
+# INTERVALBINS = positive integer (It specifies the number of bins for pre-binning continuous variables. Default value is 100.)
+# NODES = DETAIL|SUMMARY (DETAIL: A table that contains the description of the paths and summary of target variable from the root
+node to each node. SUMMARY: A table that contains the summary of target variable of every nodes.)
+# PLOTS <(ONLY)> <= plot-request <(options)>> (It specifies the tree diagram. You can specify the following plot-request:
+                                                                              ALL – All appropriate plots
+                                                                              ROC – Receiver Operating Characteristics curve
+                                                                          WHOLETREE – The entire tree with additional options
+                                                                    ZOOMEDTREE – A portion of the tree with additional options
+
+# The ID statement specifies the variable whose values will uniquely identify the observations.
+# Syntax
+ID variable;
+
+
+# The CLASS statement specifies names of variables which will be treated as categorical variables in the analysis.
+# Syntax
+CLASS variables </ class-options>;
+
+# The MODEL statement specifies the target variable and the predictors in growing the tree. By default, all variables are treated 
+as continuous unless those specified in the CLASS statement.
+# Syntax
+MODEL response <(response-option)> = variable <variable...>;
+
+# GROW: It specifies the criterion by which to grow the tree.
+# Syntax
+GROW criterion;  (Criteria: ENTROPY for categorical target variable; RSS for continuous target variable)
+
+# CODE: It specifies the filename to where the DATA step codes are written. The codes can be included in another DATA step to 
+produce predicted target values for a dataset. 
+# Syntax
+CODE FILE = filename;
+
+
+# Example: 
+proc hpsplit data = sampsio.hmeq maxbranch = 2 maxdepth = 2
+             assignmissing = popular nodes = detail
+             plots=(wholetree(linkstyle=orthogonal linkwidth=proportional)
+             zoomedtree(linkstyle=orthogonal linkwidth=proportional depth = 2));
+   class BAD delinq;
+   model BAD (event = ‘1’) = debtinc delinq;
+   grow entropy;
+   code file = '/home/mllam/Data Mining Principles/Code/Week 5/hmeq_BAD_score.sas';
+run;
+
+
+proc hpsplit data = sampsio.hmeq maxbranch = 2 maxdepth = 2
+             assignmissing = popular nodes = detail
+             plots=(wholetree(linkstyle=orthogonal linkwidth=proportional)
+             zoomedtree(linkstyle=orthogonal linkwidth=proportional depth = 2));
+   class delinq reason;
+   model mortdue = debtinc delinq reason;
+   grow rss;
+   code file = '/home/mllam/Data Mining Principles/Code/Week 5/hmeq_MORTDUE_score.sas';
+run;
+
+
+
+
+
+
+
+
+
+
+
+
+variables are SAS variable names
+class-options: DESCENDING andORDER = FORMATTED | INTERNAL
+
+
+
+
+
+
+
 
