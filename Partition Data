@@ -1,0 +1,61 @@
+PROC HPSAMPLE <options>; 
+  <CLASS variables>;
+  <VAR variables>;
+  <TARGET variables>;
+  
+ ## PROC HPSAMPLE Basic Options
+ DATA = <libref.> SAS-data-set
+ OUT = <libref.> SAS-data-set
+ PARTITION #_PARTIND_ = 1 (observation is sampled), =0 otherwise, without PARTITION, the OUT dataset contains only sampled observations
+ PARTINDNAME = partition-indicator-name  # Default is _PARTIND_
+ SEED = positive integer  # not exceed 2^31-2, default is 12345
+ SAMPOBS = positive integer # minimum number of observations in your sample
+ SAMPPCT = positive number  # specify the percentage of observations to appear in your sample, SAMPOBS or SAMPPCT either one. 
+ 
+ ## CLASS: classification variables
+ ## VAR: numeric variables
+ 
+ ## TARGET: classification variables to be used for stratification, TARGET variables should be specified in CLASS, up to 4 are supported, and maximum number of levels is 256. 
+ 
+ 
+ ## Example
+ ## Simple Random Sampling: 
+ proc hpsample data = sampsio.hmeq out = hmeq_sample
+	seed = 60611 partition samppct = 70;
+    class JOB REASON BAD;
+    var CLAGE CLNO DEBTINC DELINQ DEROG LOAN MORTDUE NINQ VALUE YOJ;
+run;
+
+/*Inspect metadata of the output dataset: hmeq_sample*/
+proc contents data=hmeq_sample;
+run;
+
+/*Check distributions of the two partitions*/
+proc tabulate data = hmeq_sample;
+     class BAD _PARTIND_;
+     tables(_PARTIND_ ALL), (colpctn = 'Distribution of _PARTIND_ within BAD')*(BAD ALL);
+     tables(_PARTIND_ ALL), (rowpctn = 'Distribution of BAD within _PARTIND_')*(BAD ALL);
+run;
+
+
+ ## Example
+ ## Stratified Sampling: 
+ proc hpsample data = sampsio.hmeq out = hmeq_sample
+	seed = 60611 partition samppct = 70;
+    class JOB REASON BAD;
+    var CLAGE CLNO DEBTINC DELINQ DEROG LOAN MORTDUE NINQ VALUE YOJ;
+    target BAD;
+run;
+
+
+## For analyses that have a categorical target variable, Stratified Sampling is recommended to create partitions.
+## For analysees that have a continuous target variable, Simple Random Sample is recommended to create partitions. 
+
+
+ 
+ 
+ 
+ 
+ 
+ 
+  
