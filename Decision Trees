@@ -15,8 +15,8 @@ PROC HPSPLIT <options>;
 create this number of children unless it is impossible. By default, MAXBRANCH = 2 which is appropriate for CART)
 # MAXDEPTH = positive integer (It specifies the maximum depth of the tree to be grown.The default value is: MAXDEPTH = integer 
 part of (10 / log2(MAXBRANCH))If MAXBRANCH = 2, then MAXDEPTH = 10)
-# MINCATSIZE = positive integer (It specifies the minimum number of observations that a category must have in order to be considered
-in the split.By default, MINCATSIZE = 1.)
+
+# MINCATSIZ
 # MINLEAFSIZE = positive integer (It specifies the minimum number of observations that a child node must have in order for the split
 to be considered.By default, MINLEAFSIZE = 1.)
 # MAXLEAVES = positive integer (It specifies the maximum number of leaf nodes in the tree to be grown.It cannot be specified together
@@ -25,6 +25,7 @@ with MAXDEPTH.No default value)
 # INTERVALBINS = positive integer (It specifies the number of bins for pre-binning continuous variables. Default value is 100.)
 # NODES = DETAIL|SUMMARY (DETAIL: A table that contains the description of the paths and summary of target variable from the root
 node to each node. SUMMARY: A table that contains the summary of target variable of every nodes.)
+
 # PLOTS <(ONLY)> <= plot-request <(options)>> (It specifies the tree diagram. You can specify the following plot-request:
                                                                               ALL – All appropriate plots
                                                                               ROC – Receiver Operating Characteristics curve
@@ -32,8 +33,10 @@ node to each node. SUMMARY: A table that contains the summary of target variable
                                                                     ZOOMEDTREE – A portion of the tree with additional options
 
 
-# The ID statement specifies the variable whose values will uniquely identify the observations.
+# The ID statement specifies the variable whose values will uniquely identify the observations.E = positive integer (It specifies the minimum number of observations that a category must have in order to be considered
+in the split.By default, MINCATSIZE = 1.)
 # Syntax
+
 ID variable;
 
 
@@ -52,7 +55,7 @@ GROW criterion;  (Criteria: ENTROPY for categorical target variable; RSS for con
 
 # CODE: It specifies the filename to where the DATA step codes are written. The codes can be included in another DATA step to 
 produce predicted target values for a dataset. 
-# Syntax
+e# Syntax
 CODE FILE = filename;
 
 
@@ -62,7 +65,7 @@ proc hpsplit data = sampsio.hmeq maxbranch = 2 maxdepth = 2
              plots=(wholetree(linkstyle=orthogonal linkwidth=proportional)
              zoomedtree(linkstyle=orthogonal linkwidth=proportional depth = 2));
    class BAD delinq;
-   model BAD (event = ‘1’) = debtinc delinq;
+t model BAD (event = ‘1’) = debtinc delinq;
    grow entropy;
    code file = '/home/mllam/Data Mining Principles/Code/Week 5/hmeq_BAD_score.sas';
 run;
@@ -79,6 +82,46 @@ proc hpsplit data = sampsio.hmeq maxbranch = 2 maxdepth = 2
 run;
 
 
+
+## Build and Compare Decision Tree Models: 
+/*Step One: Data Partition*/
+%let MyDir = %str(/home/maozhu20120/Homework/);
+libname MyDir "&MyDir.";
+
+proc hpsample data = sampsio.hmeq out = MyDir.hmeq_sample
+	seed = 20160416 partition samppct = 70;
+   class BAD DELINQ DEROG JOB NINQ REASON;
+   var CLARGE CLINO DEBTINC LOAN MORTDUE VALUE YOJ;
+   target BAD;
+run;
+
+/*Step Two: Decision Tree Process*/
+filename OutScr '/home/maozhu20120/Homework/Tree_Score.sas';
+proc hpsplit data = MyDir.hmeq_sample maxbranch=2 maxdepth=3
+	 assignmissing = popular nodes = detail seed = 20161101
+	 plots=(wholetree(linkstyle = orthogonal linkwidth = proportional)
+	 zoomedtree(linkstyle = orthogonal linkwidth = proportional depth = 3));
+     where(_PARTIND_ eq 1);
+     class JOB REASON BAD;
+     model BAD(event = "1") = CLAGE CLINO DEBTINC DELINQ DEROG LOAN MORTDUE NINQ VALUE YOJ JOB REASON;
+     grow entropy;
+     code file = OutScr;
+run;
+
+/*Step Three: Obtain predicted probabilities in Training and Validation partitions*/
+data hmeq_sample;
+ set hmeq_sample;
+ %include OutScr;
+run;
+
+
+/*Step Four: Plot Distribution of Predicted Probabilities*/
+proc sgpanel data = hmeq_sample pctlevel = cell;
+	panelby _PARTIND_ BAD/rows=2 columns = 2;
+	histogram P_BAD1/binwidth=0.1 scale = percent;
+	colaxis values = (0 to 1 by 0.1) grid;
+	rowaxis values = (0 to 1 by 0.1) grid;
+run;
 
 
 
