@@ -174,16 +174,13 @@ proc sgrender data = N_Count
    template = HeatMap;
 run;
 
-
-
-/*Use Macro*/
-%MyHeatMap 
+%MyHeatMap
 (InputData = sashelp.cars,
  ChartTitle = Number of Cylinders BY Origin,
  XCategory = Origin,
- YCategory= Cylinders,
- XLabel= Origin of Vehicle,
- yLabel= Number of Cylinders);
+ YCategory = Cylinders,
+ XLabel = Origin of Vehicles,
+ YLabel = Number of Cylinders);
 
 
 
