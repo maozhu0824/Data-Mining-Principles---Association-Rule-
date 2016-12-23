@@ -1,0 +1,6 @@
+/*Macro Parentheses*/
+%MACRO macro_name (argument1=, argument2=,..., argumentk=);
+<macro_definition>
+%MEND <macro_name>;
+
+
