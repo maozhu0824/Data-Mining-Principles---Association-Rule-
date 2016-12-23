@@ -84,6 +84,11 @@ run;
 %mend MyPieChart; 
 
 
+/*Use Macro*/
+%MyPieChart(
+InputData = sashelp.cars,
+ChartTitle = Pie Chart of Origin,
+Category = ORIGIN);
 
 
 
