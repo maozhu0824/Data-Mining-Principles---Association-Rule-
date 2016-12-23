@@ -47,7 +47,6 @@ run;
   
 
 
-
 /*Pie Chart Macro*/
 %macro MyPieChart
 (InputData =,
@@ -91,7 +90,100 @@ ChartTitle = Pie Chart of Origin,
 Category = ORIGIN);
 
 
+/*HeatMap*/
+proc template;
+  define statgraph HeatMap;
+  begingraph/designwidth = 800 designheight = 400;
+    entrytitle "Number of Cylinders By Origin";
+    layout overlay/
+      xaxisopts = (label = "Origin")
+      yaxisopts = (label = "Number of Cylinders");
+      heatmapparm x = Origin y = Cylinders
+          colorresponse = _FREQ_/
+          name = "heatmapparm"
+          xbinaxis = false
+          ybinaxis = false;
+      continuouslegend "heatmapparm"/
+            orient=vertical location= outside
+            haligh = center valign = center
+            valuecounthint=10;
+      endlayout;
+    endgraph;
+    end;
+run;
 
+proc summary data = sashelp.cars nway;
+   class Cylinders Origin;
+   output out= N_Count;
+run;
+
+proc tabulate data = N_Count;
+   class Cylinders Origin;
+   freq _FREQ_;
+   table(Origin ALL),(n)*(Cylinders ALL);
+run;
+
+proc sgrender data = N_Count
+   template = HeatMap;
+run;
+
+
+
+/*Macro for HeatMap*/
+%macro MyHeatMap 
+(InputData =,
+ ChartTitle =,
+ XCategory =,
+ YCategory=,
+ XLabel=,
+ yLabel=);
+  
+proc template;
+  define statgraph HeatMap;
+  begingraph/designwidth = 800 designheight = 400;
+    entrytitle "&ChartTitle.";
+    layout overlay/
+      xaxisopts = (label = "&XLabel.")
+      yaxisopts = (label = "&YLabel.");
+      heatmapparm x = &XCategory. y = &YCategory.
+          colorresponse = _FREQ_/
+          name = "heatmapparm"
+          xbinaxis = false
+          ybinaxis = false;
+      continuouslegend "heatmapparm"/
+            orient=vertical location= outside
+            haligh = center valign = center
+            valuecounthint=10;
+      endlayout;
+    endgraph;
+    end;
+run;
+
+proc summary data = &InputData. nway;
+   class &XCategory. &YCategory.;
+   output out= N_Count;
+run;
+
+proc tabulate data = N_Count;
+   class &XCategory. &YCategory.;
+   freq _FREQ_;
+   table(&XCategory. ALL),(n)*(&YCategory. ALL);
+run;
+
+proc sgrender data = N_Count
+   template = HeatMap;
+run;
+
+
+
+/*Use Macro*/
+%MyHeatMap 
+(InputData = sashelp.cars,
+ ChartTitle = Number of Cylinders BY Origin,
+ XCategory = Origin,
+ YCategory= Cylinders,
+ XLabel= Origin of Vehicle,
+ yLabel= Number of Cylinders);
 
 
 
