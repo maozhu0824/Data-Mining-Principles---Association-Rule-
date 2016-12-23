@@ -3,4 +3,107 @@
 <macro_definition>
 %MEND <macro_name>;
 
+/*Replacing text strings with macro variables*/
+%let CNetID = maozhu20120;
+libname MyLib "home/&CNetID./SASWorkshop/Week 4";
+
+/*Display macro variables by the %PUT macro statement*/
+%let CNetID = maozhu20120;
+%put &CNetID.;
+ %put CNetID = &CNetID.;
+
+
+/*Macro Statement Definition*/
+%MACRO macro_name;
+<macro_definition>
+%MEND <macro_name>; 
+
+%macro CNetID;
+maozhu20120
+%mend CNetID;
+libname MyLib "/home/%CNetID/SASWorkshop/Week 4"
+
+
+/*Pie Chart*/
+proc template;
+  define statgraph MyPieChart;
+  begingraph;
+    entrytitle "Pie Chart of Percents Pothole Reports";
+    layout region;
+      piechart category = creation_month
+      /datalabellocation = callout
+       categorydirection = clockwise
+       start=90 stat=pct
+       othersliceopts = (type=percent percent=5 label = "Other Months");
+     endlayout;
+   endgraph;
+   end;
+run;
+
+proc sgrender data = Week2.ChicagoPotHole
+        template = MyPieChart;
+    title "All Wards";
+run;
+  
+
+
+
+/*Pie Chart Macro*/
+%macro MyPieChart
+(InputData =,
+ ChartTitle =,
+ Category =,
+ OtherPercent = 5,
+ OtherLabel = %str(Others));
+  
+proc template;
+  define statgraph MyPieChart;
+  begingraph;
+    entrytitle "&ChartTitle.";
+    layout region;
+      piechart category = &Category.
+      /datalabellocation = callout
+       categorydirection = clockwise
+       start=90 stat=pct
+       othersliceopts = (type=percent percent=&OtherPercent. label = "&OtherLabel.");
+     endlayout;
+   endgraph;
+   end;
+run;
+
+/*Show a frequency table to check pie chart percents*/
+title "Frequency Table for &Category.";
+proc freq data = &InputData.;
+  tables &Category.;
+run;
+
+proc sgrender data = &InputData. template = MyPieChart;
+  title "&ChartTitle.";
+run;
+
+%mend MyPieChart; 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+      
+      
+
 
