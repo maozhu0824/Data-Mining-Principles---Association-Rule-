@@ -146,7 +146,8 @@ proc template;
       xaxisopts = (label = "&XLabel.")
       yaxisopts = (label = "&YLabel.");
       heatmapparm x = &XCategory. y = &YCategory.
-          colorresponse = _FREQ_/
+
+colorresponse = _FREQ_/
           name = "heatmapparm"
           xbinaxis = false
           ybinaxis = false;
@@ -181,6 +182,65 @@ run;
  YCategory = Cylinders,
  XLabel = Origin of Vehicles,
  YLabel = Number of Cylinders);
+
+
+/*Data Value to Macro Variable*/
+data Toy;
+input x @@; /*@@ instructs SAS to keep reading until end of line*/
+datalines;
+1 2 3 4 5 6 7 8 9
+run;
+
+data Toy; 
+set Toy end = eof;
+retain sum 0;
+sum + x;
+if (eof eq 1) then call symput('_Sum_', trim(put(sum, best32.-l)));
+run;
+
+%put _Sum_ = &_Sum_.;
+data Toy; 
+set Toy;
+Sum = &_Sum_.;
+ColumnPercent = 100*(x/&_Sum_.);
+run; 
+
+
+/*Call System*/
+data Toy;
+input x @@; /*@@ instructs SAS to keep reading until end of line*/
+datalines;
+1 2 3 4 5 6 7 8 9
+run;
+
+data Toy;
+set Toy end = eof;
+/*Initialize min_x and max_x to system missing*/
+retain min_x.;
+retain max_x.;
+/*The min() function will return the first non-missing x if min_x is missing*/
+min_x = min(min_x, x);
+/*The max() function will return the first non-missing x if max_x is missing*/
+max_x = max(max_x, x);
+
+if(eof eq 1) then do;
+call symput('_min_', trim(put(min_x, best32.-l)));
+call symput('_max_', trim(put(max_x, best32.-l)));
+end;
+run;
+
+%put _min_ = &_min_.;
+%put _max_ = &_max_.;
+
+data Toy;
+set Toy;
+y = (x - &_min_.)/(&_max_.-&_min_.);
+run;
+
+proc print data = Toy;
+run;
+
+
 
 
 
