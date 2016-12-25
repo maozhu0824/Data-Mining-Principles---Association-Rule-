@@ -1,0 +1,25 @@
+/*Merge Data Sets using MERGE Statement*/
+data hmeq_metadata;
+  merge hmeq_contents hmeq_nlevels;
+  by NAME;
+  rename TYPE = STORAGE_TYPE;
+  rename LENGTH = DEFINED_LENGTH;
+run;
+
+proc print data = hmeq_metadata;
+run; 
+
+
+/*Merge Data Sets using PROC SQL*/
+proc sql;
+create table hmeq_metadata as
+select S1.NAME, S1.NOBS, S1.LABEL, S1.TYPE as STORAGE_TYPE,
+       S1.LENGTH as DEFINED_LENGTH,
+       S1.FORMAT, S1.FORMATD, S2.NNonMissLevels
+from hmeq_contents as S1, hmeq_nlevels as S2
+where (upcase(S1.NAME) = upcase(S2.TableVar));
+quit;
+
+proc print data = hmeq_metadata;
+run;
+
