@@ -1,0 +1,36 @@
+/*Find Format Codes, Lengths, and Decimals*/
+data FormatMeta;
+/*One record is enough*/
+set sampsio.hmeq(obs = 1);
+
+/*Define arrays of all character variables*/
+array CharVar(*)$_CHARACTER_;
+
+/*Define arrays of all numeric variables*/
+array NumVar(*)_NUMERIC_;
+
+/*Define variables in FormatMeta*/
+length NAME $32;
+length FORMAT_CODE $32;
+length FORMAT_WIDTH 8;
+lentgh FORMAT_NDEC 8;
+
+/*Retrieve information*/
+do ivar = 1 to dim(CharVar);
+ NAME = vname(CharVar(ivar));
+ FORMAT_CODE = vformatn(CharVar(ivar));
+ FORMAT_WIDTH = vformatw(CharVar(ivar));
+ FORMAT_NDEC = vformatd(CharVar(ivar));
+ output;
+end;
+
+do ivar = 1 to dim(NumVar);
+ NAME = vname(NumVar(ivar));
+ FORMAT_CODE = vformatn(NumVar(ivar));
+ FORMAT_WIDTH = vformatw(NumVar(ivar));
+ FORMAT_NDEC = vformatd(NumVar(ivar));
+ output;
+end;
+
+ keep NAME FORMAT_CODE FORMAT_WIDTH FORMAT_NDEC;
+run;
