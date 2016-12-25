@@ -1,3 +1,154 @@
+/*Create MetaData*/
+%macro Create_Metadata
+(
+   data =,              /* Name of dataset from which metadata will be obtained */ 
+   outmetadata =,       /* Name of dataset where metadata will be writtend to */
+   CatMinNLevels = 5,   /* Minimum number of levels when a numeric variable is considered categorical */
+   CatMaxNLevels = 50,  /* Maximum number of levels of a categorical variable before it is rejected */
+   Debug = N            /* Turn on debugging switch (Y/N) ? */
+);
+
+   /* Save the starting timestamp */
+   %local TimeStart;
+   %let TimeStart = %sysfunc(datetime());
+
+   /* Get a draft of metadata */
+   proc contents data = &data. out = data_contents noprint;
+   run;
+
+   /* Add Storage Type */
+   data data_contents;
+      set data_contents;
+
+      length STORAGE_TYPE $ 10;
+      if (TYPE eq 1) then STORAGE_TYPE = 'NUMERIC';
+      else if (TYPE eq 2) then STORAGE_TYPE = 'CHARACTER';
+      else STORAGE_TYPE = ' ';    /* Make sure the omitted type is caught */
+   run;
+
+   %if (&Debug. eq Y) %then %do;
+      proc print data = data_contents;
+      run;
+   %end;
+
+   /* Get number of levels, number of non-missing levels, and number of missing levels */
+   ods output NLevels = var_nlevels;
+   proc freq data = &data. nlevels;
+      tables _ALL_ / noprint;
+   run;
+   ods output close;
+
+   %if (&Debug. eq Y) %then %do;
+      proc print data = var_nlevels;
+      run;
+   %end;
+
+   /* Get the format information, even if it is the default formats */
+   data FormatMeta;
+      set &data. (obs = 1);       /* One record is enough */
+
+      array CharVar (*) $ _CHAR_; /* Define arrays of all character variables */
+      array NumVar (*) _NUMERIC_; /* Define arrays of all numeric variables */
+
+      /* Define variables in FormatMeta */
+      length NAME $ 32;
+      length FORMAT_CODE $ 32;
+      length FORMAT_WIDTH 8;
+      length FORMAT_NDEC 8;
+
+      /* Retrieve information for character variables */
+      do ivar = 1 to dim(CharVar);
+         NAME = vname(CharVar(ivar));
+         FORMAT_CODE = vformatn(CharVar(ivar));
+         FORMAT_WIDTH = vformatw(CharVar(ivar));
+         FORMAT_NDEC = vformatd(CharVar(ivar));
+         output;
+      end;
+
+      /* Retrieve information for numeric variables */
+      do ivar = 1 to dim(NumVar);
+         NAME = vname(NumVar(ivar));
+         FORMAT_CODE = vformatn(NumVar(ivar));
+         FORMAT_WIDTH = vformatw(NumVar(ivar));
+         FORMAT_NDEC = vformatd(NumVar(ivar));
+         output;
+      end;
+
+      keep NAME FORMAT_CODE FORMAT_WIDTH FORMAT_NDEC;
+   run;
+
+   %if (&Debug. eq Y) %then %do;
+      proc print data = FormatMeta;
+      run;
+   %end;
+
+   /* Merge the pieces together using NAME as the key */
+   proc sql;
+      create table output_metadata as
+         select S1.NAME, S1.NOBS, S1.LABEL, S1.STORAGE_TYPE, S1.LENGTH as DEFINED_LENGTH,
+                S2.FORMAT_CODE, S2.FORMAT_WIDTH, S2.FORMAT_NDEC,
+                S3.NLevels, S3.NMissLevels, S3.NNonMissLevels
+         from data_contents as S1, FormatMeta as S2, var_nlevels as S3
+         where (upcase(S1.NAME) = upcase(S2.NAME) = upcase(S3.TableVar))
+         order by S1.NAME;
+   quit; 
+
+   data output_metadata;
+      set output_metadata;
+
+      length DATA_TYPE $ 8;
+      length DOMAIN_TYPE $ 11;
+      length ANALYSIS_ROLE $ 6;
+
+      /* Determine DATA_TYPE */
+      select (upcase(FORMAT_CODE));
+         when ('B8601DT', 'DATETIME', 'DTDATE',  'DTMONYY', 'DTWKDATX', 'DTYEAR',
+               'DTYYQC',  'E8601DN',  'E8601DT', 'E8601DZ', 'MDYAMPM',  'NLDATM') DATA_TYPE = 'DATETIME';
+         when ('B8601DA', 'B8601DN', 'DATE',    'DAY',    'DDMMYY', 'DOWNAME',
+               'E8601DA', 'HDATE',   'HEBDATE', 'JULDAY', 'JULIAN', 'MMDDYY',
+               'MMYY',    'MONNAME', 'MONTH',   'MONYY',  'NLDATE', 'QTR',
+
+'WEEKDA',  'WORDDAT', 'YEAR',    'YYMM',   'YYMON',  'YYQ') DATA_TYPE = 'DATE';
+         otherwise do;
+            if (STORAGE_TYPE eq 'NUMERIC') then DATA_TYPE = 'DECIMAL';
+            else DATA_TYPE = 'STRING';
+         end;
+      end;
+
+      /* Determine Domain Type */
+      if (DATA_TYPE eq 'STRING' or NLEVELS LT &CatMinNLevels.) then DOMAIN_TYPE = 'CATEGORICAL';
+      else DOMAIN_TYPE = 'INTERVAL';
+
+
+      /* Determine Analysis Role */
+      if (DOMAIN_TYPE eq 'CATEGORICAL' and NLEVELS GT &CatMaxNLevels.) then ANALYSIS_ROLE = 'REJECT';
+      else if (NLEVELS lt 2) then ANALYSIS_ROLE = 'REJECT';
+      else ANALYSIS_ROLE = 'INPUT';
+   run;
+
+   data &outmetadata;
+      set output_metadata;
+   run;
+
+   %if (&Debug. eq Y) %then %do;
+       proc print data = &outmetadata.;
+       run;
+   %end;
+
+   /* Clean up temporary datasets */
+   proc datasets lib = work nolist nowarn noprint;
+      delete Data_Contents FormatMeta output_metadata var_nlevels;
+   run;
+
+   /* Report the elapsed time of this macro */
+   %local TimeElapsed;
+   %let TimeElapsed = %sysevalf(%sysfunc(datetime()) - &TimeStart.);
+   %let TimeElapsed = %sysfunc(putn(&TimeElapsed., time12.2-l));
+   %put ;
+   %put NOTE: (&SYSMACRONAME.) Elapsed Time = &TimeElapsed.;
+
+%mend Create_Metadata;
+
 /*PROC CONTENTS*/
 proc contents <option(s)>
 ## Options: 
