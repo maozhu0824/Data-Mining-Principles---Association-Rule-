@@ -1,0 +1,32 @@
+/*PROC CONTENTS*/
+proc contents <option(s)>
+## Options: 
+data = SAS-data-set-name
+out = SAS-data-set-name
+
+/*Example*/
+proc contents data = sampsio.hmeq
+out = hmeq_contents;
+run;
+
+
+/*PROC FREQ*/
+proc freq <option(s)>
+## Options: 
+data = SAS-data-set-name
+nlevels ## displays the "Number of Variable Levels" table
+
+/*ODS Name for "Number of Variable Levels"*/
+ods trace on;
+proc freq data = sampsio.hmeq nlevels;
+  tables _ALL_/noprint;
+run;
+
+/*Example*/
+ods trace on;
+proc freq data = sampsio.hmeq nlevels;
+  tables _ALL_/noprint;
+run;
+
+
+
