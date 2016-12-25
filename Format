@@ -1,3 +1,4 @@
+
 /*Find Format Codes, Lengths, and Decimals*/
 data FormatMeta;
 /*One record is enough*/
@@ -33,4 +34,7 @@ do ivar = 1 to dim(NumVar);
 end;
 
  keep NAME FORMAT_CODE FORMAT_WIDTH FORMAT_NDEC;
+run;
+
+proc print data = FormatMeta;
 run;
