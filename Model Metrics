@@ -1,0 +1,182 @@
+/**************************************************************************************************/
+/* Name:     compute_model_metric.sas                                                             */
+/* Purpose:  Calculate model assessment metrics                                                   */
+/* Creator:  Ming-Long Lam, Ph.D., University of Chicago                                          */
+/* Date:     November 5, 2016                                                                     */
+/**************************************************************************************************/
+
+%macro compute_model_metric
+(
+   ScoreData =,               /* Data name for scoring models (will be modified upon exit) */
+   DepVar =,                  /* Name of the dependent variable */
+   EventValue =,              /* Formatted value of dependent variable that indicates an event */
+   EventPredProb =,           /* Predicted probability that the event will occur */
+   EventProbThreshold = 0.5,  /* Threshold for event probability to indicate a success */
+   ModelFit =,                /* Data name for the model fit information */
+   Debug = N                  /* Show debugging information (Y/N) */
+);
+
+   /* Save the starting timestamp */
+   %local TimeStart;
+   %let TimeStart = %sysfunc(datetime());
+
+   /* Upper case debugging flag */
+   %let Debug = %upcase(&Debug.);
+
+   %if (&Debug. eq Y) %then %do;
+      %put NOTE: (&SYSMACRONAME.) Macro Entry ...;
+   %end;
+
+   %local Misclassify;        /* Percent of misclassified observations */
+   %local nConcordant;        /* Number of concordant pairs */
+   %local nDiscordant;        /* Number of discordant pairs */
+   %local nTied;              /* Number of tied pairs */
+   %local RootAveSqError;     /* Root average squared error */
+
+   %let Misclassify = 0;
+   %let nConcordant = 0;
+   %let nDiscordant = 0;
+   %let nTied = 0;
+   %let RootAveSqError = 0;
+
+   /* Aggregate observations by the target values and the predicted probabilities */
+   proc summary data = &ScoreData. nway;
+      where (missing(&DepVar.) eq 0 and missing(&EventPredProb.) eq 0);
+      class &DepVar. &EventPredProb.;
+      output out = _1AggrProb1_ (drop = _TYPE_);
+   run;
+
+   /* Separate the predicted probabilities by Event and Non-Event, and rename variables */
+   data _1Event1_ (rename = (&EventPredProb. = EventPredProb _FREQ_ = EventPredProbFREQ))
+        _1NoEvent1_ (rename = (&EventPredProb. = NoEventPredProb _FREQ_ = NoEventPredProbFREQ));
+      set _1AggrProb1_ end = eof;
+
+      retain accFREQ 0;
+      retain Misclassify 0;
+      retain RootAveSqError 0;
+
+      accFREQ + _FREQ_;
+
+      /* Count number of misclassified observations, and accumulate values for RASE */
+      if (compare(vvalue(&DepVar.), "&EventValue.", 'LI') eq 0) then
+      do;
+
+         /* The event observations */
+         if (&EventPredProb. lt &EventProbThreshold.) then Misclassify = Misclassify + _FREQ_;
+         RootAveSqError = RootAveSqError + _FREQ_ * (1.0 - &EventPredProb.) * (1.0 - &EventPredProb.);
+         output _1Event1_;
+      end;
+      else
+      do;
+
+         /* The non-event observations */
+         if (&EventPredProb. ge &EventProbThreshold.) then Misclassify = Misclassify + _FREQ_;
+         RootAveSqError = RootAveSqError + _FREQ_ * &EventPredProb. * &EventPredProb.;
+         output _1NoEvent1_;
+      end;
+
+
+      /* Finalize the Misclassification Rate, and RASE */
+      if (eof eq 1) then
+      do;
+         %if (&Debug. eq Y) %then %do;
+            put "NOTE: (&SYSMACRONAME.) accFREQ = " accFreq; 
+         %end;
+         if (accFREQ gt 0) then
+         do;
+            Misclassify = Misclassify / accFREQ;
+            RootAveSqError = sqrt(RootAveSqError / accFREQ);
+            call symput('Misclassify', trim(put(Misclassify, best32.-l)));
+            call symput('RootAveSqError', trim(put(RootAveSqError, best32.-l)));
+         end;
+      end;
+
+      drop accFREQ Misclassify RootAveSqError &DepVar.;
+   run;
+
+   %if (&Debug. eq Y) %then %do;
+      %put NOTE: (&SYSMACRONAME.) Misclassify = &Misclassify.;
+      %put NOTE: (&SYSMACRONAME.) RootAveSqError = &RootAveSqError.;
+   %end;
+
+   /* Cartesian product of predicted probabilities from both Event and Non-Event tables */
+   /* POINT option specifies a temporary variable whose numeric value determines which
+      observation is read */ 
+   /* NOBS option creates and names a temporary variable whose value is the total number
+      of observations in the input data set */ 
+   data _AllPairs_;
+      set _1Event1_ end = eof;
+      do i = 1 to n;
+         set _1NoEvent1_ point = i nobs = n;
+         output;
+      end;
+   run;
+
+   /* Count numbers of concordant, discordant, and tied pairs */
+   /* _NULL_ is a dummy dataset which does not holds any observations */
+   data _NULL_;
+      set _AllPairs_ end = eof;
+
+      retain nConcordant 0;
+      retain nDiscordant 0;
+      retain nTied 0;
+
+      thisCount = EventPredProbFREQ * NoEventPredProbFREQ;
+      if (EventPredProb gt NoEventPredProb) then nConcordant = nConcordant + thisCount;
+      else if (EventPredProb lt NoEventPredProb) then nDiscordant = nDiscordant + thisCount;
+      else nTied = nTied + thisCount;
+
+      if (eof eq 1) then
+      do;
+         call symput('nConcordant', trim(put(nConcordant, best32.-l)));
+         call symput('nDiscordant', trim(put(nDiscordant, best32.-l)));
+         call symput('nTied', trim(put(nTied, best32.-l)));
+      end;
+   run;
+
+   %if (&Debug. eq Y) %then %do;
+      %put NOTE: (&SYSMACRONAME.) nConcordant = &nConcordant.;
+      %put NOTE: (&SYSMACRONAME.) nDiscordant = &nDiscordant.;
+      %put NOTE: (&SYSMACRONAME.) nTied       = &nTied.;
+   %end;
+
+   /* Create or append model statistic to model fitting table */
+   data &ModelFit.;
+
+      /* Number of pairs */
+      _nConcordant_ = &nConcordant.;
+      _nDiscordant_ = &nDiscordant.;
+      _nTied_ = &nTied.;
+
+      /* Area Under Curve statistic to model fitting table */
+      nPairs = &nConcordant. + &nDiscordant. + &nTied.;
+      if (nPairs gt 0) then _AUC_ = 0.5 + 0.5 * ((&nConcordant. - &nDiscordant.) / nPairs);
+      else _AUC_ = .;
+
+      /* Percent of Misclassification statistic to model fitting table */
+      _MISC_ = &Misclassify.;
+
+      /* Root average squared error statistic to model fitting table */
+      _RASE_ = &RootAveSqError.;
+   run;
+
+   /* Good housekeeping: remove temporary datasets */
+   %if (&Debug. ne Y) %then %do;
+      proc datasets lib = WORK nolist nowarn noprint;
+         delete _1AggrProb1_ _1Event1_ _1NoEvent1_;
+      quit;
+   %end;
+
+   /* Report the elapsed time of this macro */
+   %local TimeElapsed;
+   %let TimeElapsed = %sysevalf(%sysfunc(datetime()) - &TimeStart.);
+   %let TimeElapsed = %sysfunc(putn(&TimeElapsed., time12.2-l));
+   %put ;
+   %put NOTE: (&SYSMACRONAME.) Elapsed Time = &TimeElapsed.;
+
+   %if (&Debug. eq Y) %then %do;
+      %put NOTE: (&SYSMACRONAME.) ... Macro Exit;
+   %end;
+
+%mend compute_model_metric;
+
