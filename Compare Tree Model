@@ -1,0 +1,157 @@
+%let MyDir = %str(/home/mllam/SASWorkshop/Week 6);
+libname MyDir "&MyDir.";
+
+%let InputData = sampsio.claim_history;
+%let EventValue = %str(1);
+%let DepVar = CLAIM_FLAG;
+%let IntPred = AGE BLUEBOOK CAR_AGE HOME_VAL HOMEKIDS INCOME KIDSDRIV MVR_PTS TIF TRAVTIME;
+%let NomPred = CAR_TYPE CAR_USE EDUCATION GENDER MSTATUS OCCUPATION PARENT1 RED_CAR REVOKED URBANICITY;
+%let NQuantile = 10;
+ 
+
+proc contents data = &InputData.;
+run;
+
+/* Partition data into 70% training and 30 validation */
+proc hpsample data = &InputData.
+              out = MyDir._Partition_
+              partition samppct = 70 seed = 20161105;
+   class &DepVar. &NomPred.;
+   var &IntPred.;
+   target &DepVar.;
+run;
+
+/* Physically store the partitions into separate datasets */
+data MyDir._Training_
+     MyDir._Validation_;
+   set MyDir._Partition_;
+   select (_PARTIND_);
+      when (0) output MyDir._Validation_;
+      when (1) output MyDir._Training_;
+      otherwise;
+   end;
+run;
+
+/* Find the event probability from the training partition */
+ods output OneWayFreqs = MyDir._OneWayFreqs_;
+proc freq data = MyDir._Training_;
+   table &DepVar.;
+run;
+
+data _NULL_;
+   set MyDir._OneWayFreqs_ end = eof;
+   if (compare(F_&DepVar., "&EventValue.", 'LI') eq 0) then
+   do;
+      call symput('EventProbThreshold',trim(put(Percent/100, best32.-l)));
+      stop;
+   end;
+run;
+%put EventProbThreshold = &EventProbThreshold.;
+
+/* Build tree using the nominal and the interval predictors */
+filename TreeScr "&MyDir./_Tree_Scorecode_.sas";
+proc hpsplit data = MyDir._Training_
+             maxdepth = &MaxTreeDepth.
+             maxbranch = 2
+             assignmissing = popular
+             plots=(wholetree(linkstyle=orthogonal linkwidth=constant)
+                    zoomedtree(depth = &MaxTreeDepth. linkstyle=orthogonal linkwidth=constant nolegend));
+   class &DepVar. &NomPred.;
+   model &DepVar. (event = "&EventValue.") = &NomPred. &IntPred.;
+   grow entropy;
+   code file = TreeScr;
+run;
+
+/* Score the validation partition */
+%let PredProb = P_%trim(&DepVar.)%trim(&EventValue.);
+data MyDir._Validation_Score_;
+   set MyDir._Validation_;
+   %include TreeScr;
+   keep &DepVar. &PredProb.;
+run;
+
+proc freq data = MyDir._Validation_Score_ nlevels;
+   table &PredProb. / noprint;
+run;
+
+%include "&MyDir./compute_model_metric.sas";
+%compute_model_metric
+(
+   ScoreData = MyDir._Validation_Score_,
+   DepVar = &Depvar.,
+   EventValue = &EventValue.,
+   EventPredProb = &PredProb.,
+   EventProbThreshold = 0.5,
+   ModelFit = MyDir._ModelFit_,
+   Debug = N
+);
+
+proc print data = MyDir._ModelFit_;
+run;
+
+%include "&MyDir./compute_roc_coordinates.sas";
+%compute_roc_coordinates
+(
+   ScoreData = MyDir._Validation_Score_,
+   DepVar = &DepVar.,
+   EventValue = &EventValue.,
+   EventPredProb = &PredProb.,
+   ROCCoordinates = MyDir._ROCCoordinates_,
+   Debug = N
+);
+
+proc print data = MyDir._ROCCoordinates_;
+run;
+
+proc sgplot data = MyDir._ROCCoordinates_ noautolegend;
+   series x = OneMinusSpecificity y = Sensitivity / markers;
+   lineparm x = 0 y = 0 slope = 1;
+   xaxis grid values = (0 to 100 by 10);
+   yaxis grid values = (0 to 100 by 10);
+   title 'ROC Curve on Validation Partition';
+run;
+
+%include "&MyDir./compute_lift_coordinates.sas";
+%compute_lift_coordinates
+(
+   ScoreData = MyDir._Validation_Score_,
+   DepVar = &DepVar.,
+   EventValue = &EventValue.,
+   EventPredProb = &PredProb.,
+   LiftCoordinates = MyDir._LiftCoordinates_,
+   NQuantile = &NQuantile.,
+   Debug = N
+);
+
+data MyDir._LiftCoordinates_;
+   set MyDir._LiftCoordinates_;
+   retain global_max;
+   if (Decile eq 1) then global_max = max_EventPredProb;
+   
+   length MarkerLabel1 $ 50;
+   MarkerLabel1 = catx(' ','N=',put(Decile_N,best32.-l),':',
+                      put(min_EventPredProb,4.2-l),'< p <',put(max_EventPredProb,4.2-l));
+   length MarkerLabel2 $ 50;
+   MarkerLabel2 = catx(' ','N=',put(Decile_AccN,best32.-l),':',
+                      put(min_EventPredProb,4.2-l),'< p <',put(global_max,4.2-l));
+   drop global_max;
+run;
+
+proc print data = MyDir._LiftCoordinates_;
+run;
+
+proc sgplot data = MyDir._LiftCoordinates_ noautolegend;
+   series x = Decile y = Lift / markers datalabel = MarkerLabel1;
+   refline 1 / axis = y;
+   xaxis grid integer values = (1 to &NQuantile. by 1);
+   yaxis grid min = 0; 
+   title 'Lift Curve on Validation Partition';
+run;
+
+proc sgplot data = MyDir._LiftCoordinates_ noautolegend;
+   series x = Decile y = Lift_Acc / markers datalabel = MarkerLabel2;
+   refline 1 / axis = y;
+   xaxis grid integer values = (1 to &NQuantile. by 1);
+   yaxis grid min = 1; 
+   title 'Accumulated Lift Curve on Validation Partition';
+run;
