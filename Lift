@@ -1,0 +1,177 @@
+/**************************************************************************************************/
+/* Name:     compute_lift_coordinates.sas                                                         */
+/* Purpose:  Compute coordinates for the Lift chart                                               */
+/* Creator:  Ming-Long Lam, Ph.D., University of Chicago                                          */
+/* Date:     November 5, 2016                                                                     */
+/**************************************************************************************************/
+
+%macro compute_lift_coordinates
+(
+   ScoreData =,               /* Data name for scoring models (will be modified upon exit) */
+   DepVar =,                  /* Name of the dependent variable */
+   EventValue =,              /* Formatted value of dependent variable that indicates an event */
+   EventPredProb =,           /* Predicted probability that the event will occur */
+   NQuantile = 10,            /* Number of quantile for predicted probabilities */
+   LiftCoordinates =,         /* Data name for storing the Lift coordinates */
+   Debug = N                  /* Show debugging information (Y/N) */
+);
+
+   /* Save the starting timestamp */
+   %local TimeStart;
+   %let TimeStart = %sysfunc(datetime());
+
+   /* Upper case debugging flag */
+   %let Debug = %upcase(&Debug.);
+
+   %if (&Debug. eq Y) %then %do;
+      %put NOTE: (&SYSMACRONAME.) Macro Entry ...;
+   %end;
+
+   %local Actual_N_Bin;       /* Actual number of bins found in decile creation */
+   %local Total_Count;        /* Total number of observations */
+   %local Total_Event_Count;  /* Total number of event observations */
+
+   %let Actual_N_Bin = 0;
+   %let Total_Count = 0;
+   %let Total_Event_Count = 0;
+
+   /* Aggregate the predicted probabilities */
+   proc summary data = &ScoreData. nway;
+      where (missing(&DepVar.) eq 0 and missing(&EventPredProb.) eq 0);
+      class &DepVar. &EventPredProb.;
+      output out = _1AggrProb1_ (drop = _TYPE_);
+   run;
+
+   /* Divide the predicted probabilities into ten deciles */
+   filename BinScr TEMP;
+   proc hpbin data = _1AggrProb1_ numbin = &NQuantile. quantile noprint;
+      input &EventPredProb.;
+      freq _FREQ_;
+      code file = BinScr;
+   run;
+
+   data _1AggrProb1_;
+      set _1AggrProb1_ end = eof;
+      retain Actual_N_Bin 0;
+      retain Total_Count 0;
+      retain Total_Event_Count 0;
+
+      /* Create BIN variable, find the actual number of bins */
+      %include BinScr;
+      if (BIN_&EventPredProb. gt Actual_N_Bin) then Actual_N_Bin = BIN_&EventPredProb.;
+
+      /* Find total number of observations, and total number of event observations */
+      /* Create the event observation indicator */
+      Total_Count + _FREQ_;
+      if (compare(&DepVar., "&EventValue", 'LI') eq 0) then
+      do;
+         Total_Event_Count + _FREQ_;
+         EventIndicator = 1;
+      end;
+      else EventIndicator = 0;
+
+      if (eof eq 1) then
+      do;
+         call symput('Total_Count', trim(put(Total_Count, best32.-l)));
+         call symput('Total_Event_Count', trim(put(Total_Event_Count, best32.-l)));
+         call symput('Actual_N_Bin', trim(put(Actual_N_Bin, best32.-l)));
+      end;
+
+      drop Actual_N_Bin Total_Count Total_Event_Count;
+   run;
+
+   /* Calculate Total_Event_Percent */
+   %let Total_Event_Pct = %sysevalf(100 * (&Total_Event_Count. / &Total_Count.));
+ 
+   /* Display debugging information */
+   %if (&Debug. eq Y) %then %do;
+      %put NOTE: (&SYSMACRONAME.) Actual N Bins = &Actual_N_Bin.;
+      %put NOTE: (&SYSMACRONAME.) Total Count = &Total_Count.;
+      %put NOTE: (&SYSMACRONAME.) Total Event Count = &Total_Event_Count.;
+      %put NOTE: (&SYSMACRONAME.) Total Event Percent = &Total_Event_Pct.;
+   %end;
+
+   /* Aggregate over the BIN variable to obtain Decile_N and Gain_N statistics */
+   proc summary data = _1AggrProb1_ nway;
+      class BIN_&EventPredProb.;
+      var EventIndicator &EventPredProb.;
+      freq _FREQ_;
+      output out = &LiftCoordinates. (drop = _TYPE_ rename = (_FREQ_ = Decile_N))
+             sum(EventIndicator) = Gain_N
+             min(&EventPredProb.) = min_EventPredProb
+             max(&EventPredProb.) = max_EventPredProb;
+   run;
+
+   /* Sort data in descending order of event probabilitiy to ensure the new Decile variable in ascending order */
+   proc sort data = &LiftCoordinates.;
+      by descending BIN_&EventPredProb.;
+   run;
+
+   data &LiftCoordinates.;
+      retain Decile min_EventPredProb max_EventPredProb Decile_N Decile_Pct Gain_N Gain_Pct Response_Pct Lift
+             Decile_AccN Decile_AccPct Gain_AccN Gain_AccPct Response_AccPct Lift_Acc;
+      set &LiftCoordinates.;
+
+      retain Decile_AccN 0;
+      retain Decile_AccPct 0;
+      retain Gain_AccN 0;
+      retain Gain_AccPct 0;
+
+      /* Create DECILE variable such that DECILE = 1 has the highest predicted probabilities */
+      Decile = &Actual_N_Bin. - BIN_&EventPredProb. + 1;
+
+      /* The Lift table statistics */
+      Decile_Pct = 100 * (Decile_N / &Total_Count.);
+      Gain_Pct = 100 * (Gain_N / &Total_Event_Count.);
+      Response_Pct = 100 * (Gain_N / Decile_N);
+      Lift = Response_Pct / &Total_Event_Pct.;
+
+      /* Accumulated version of the Lift table statistics */
+      Decile_AccN + Decile_N;
+      Decile_AccPct + Decile_Pct;
+      Gain_AccN + Gain_N;
+      Gain_AccPct + Gain_Pct;
+      Response_AccPct = 100 * (Gain_AccN / Decile_AccN);
+      Lift_Acc = Response_AccPct / &Total_Event_Pct.;
+
+      label Decile = 'Decile of Predicted Probabilities';
+      label min_EventPredProb = 'Minimum Predicted Probability in Decile';
+      label max_EventPredProb = 'Maximum Predicted Probability in Decile';
+      label Decile_N = 'Number of Observations in Decile';
+      label Decile_Pct = 'Overall Percent of Observations';
+      label Gain_N = 'Number of Event Observations in Decile';
+      label Gain_Pct = 'Overall Percent of Event Observations';
+      label Response_Pct = 'Percent of Event Observations Within Decile'
+      label Lift = 'Lift in Decile';
+
+      label Decile_AccN = 'Accumulated Number of Observations in Decile';
+      label Decile_AccPct = 'Accumulated Overall Percent of Observations';
+      label Gain_AccN = 'Accumulated Number of Event Observations in Decile';
+      label Gain_AccPct = 'Accumulated Overall Percent of Event Observations';
+      label Response_AccPct = 'Accumulated Percent of Event Observations Within Decile'
+      label Lift_Acc = 'Accumulated Lift in Decile';
+
+      keep Decile min_EventPredProb max_EventPredProb Decile_N Decile_Pct Gain_N Gain_Pct Response_Pct Lift
+           Decile_AccN Decile_AccPct Gain_AccN Gain_AccPct Response_AccPct Lift_Acc;
+   run;
+
+   /* Good housekeeping: remove temporary datasets */
+   %if (&Debug. ne Y) %then %do;
+      proc datasets lib = WORK nolist nowarn noprint;
+         delete _1AggrProb1_;
+      quit;
+   %end;
+
+   /* Report the elapsed time of this macro */
+   %local TimeElapsed;
+   %let TimeElapsed = %sysevalf(%sysfunc(datetime()) - &TimeStart.);
+   %let TimeElapsed = %sysfunc(putn(&TimeElapsed., time12.2-l));
+   %put ;
+   %put NOTE: (&SYSMACRONAME.) Elapsed Time = &TimeElapsed.;
+
+   %if (&Debug. eq Y) %then %do;
+      %put NOTE: (&SYSMACRONAME.) ... Macro Exit;
+   %end;
+
+%mend compute_lift_coordinates;
+
