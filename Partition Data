@@ -53,6 +53,25 @@ run;
 
 
  
+/* Partition data into 70% training and 30 validation */
+proc hpsample data = &InputData.
+              out = MyDir._Partition_
+              partition samppct = 70 seed = 20161105;
+   class &DepVar. &NomPred.;
+   var &IntPred.;
+   target &DepVar.;
+run;
+
+/* Physically store the partitions into separate datasets */
+data MyDir._Training_
+     MyDir._Validation_;
+   set MyDir._Partition_;
+   select (_PARTIND_);
+      when (0) output MyDir._Validation_;
+      when (1) output MyDir._Training_;
+      otherwise;
+   end;
+run;
  
  
  
