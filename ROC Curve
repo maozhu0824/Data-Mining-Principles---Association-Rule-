@@ -22,3 +22,161 @@ lineparm x = 0 y = 0 slope = 1;
 xaxis grid values = (0 to 1 by 0.1);
 yaxis grid values = (0 to 1 by 0.1);
 run;
+
+
+
+
+
+/**************************************************************************************************/
+/* Name:     compute_roc_coordinates.sas                                                          */
+/* Purpose:  Compute coordinates for the Receiver Operating Characteristics (ROC) curve           */
+/* Creator:  Ming-Long Lam, Ph.D., University of Chicago                                          */
+/* Date:     November 5, 2016                                                                     */
+/**************************************************************************************************/
+
+%macro compute_roc_coordinates
+(
+ modified upon exit) */
+   DepVar =,                  /* Name of the dependent variable */
+   EventValue =,              /* Formatted value of dependent variable that indicates an event */
+   EventPredProb =,           /* Predicted probability that the event will occur */
+   ROCCoordinates =,          /* Data name for the ROC coordinates */
+   Debug = N                  /* Show debugging information (Y/N) */
+);
+
+   /* Save the starting timestamp */
+   %local TimeStart;
+   %let TimeStart = %sysfunc(datetime());
+
+   /* Upper case debugging flag */
+   %let Debug = %upcase(&Debug.);
+
+   %if (&Debug. eq Y) %then %do;
+      %put NOTE: (&SYSMACRONAME.) Macro Entry ...;
+   %end;
+
+   %local nCutOff;            /* Number of cut-off values */
+   %local CutOff;             /* List of cut-off values */
+
+   %let nCutOff = 0;
+   
+   /* Aggregate observations by descending order of the predicted probabilities */
+   proc summary data = &ScoreData. nway;
+      where (missing(&EventPredProb.) eq 0);
+       output out = _1AggrProb1_ (drop = _TYPE_);
+   run;
+
+   /* Create Cut-off values as mid-points between consecutive distinct predicted event probabilities */
+   data _1AggrProb1_;
+      set _1AggrProb1_;
+      retain PreviousProb 0;
+
+      PreviousProb = lag(&EventPredProb.);
+      if (missing(PreviousProb) eq 0) then CutOff = (PreviousProb + &EventPredProb.) / 2;
+      else CutOff = .;
+   run;
+
+   proc sql noprint;
+
+      /* Retrieve the number of non-missing cut-off values into a macro variable */
+      select count(A.CutOff) into :nCutoff trimmed 
+      from _1AggrProb1_ as A
+      where missing(A.CutOff) eq 0;
+
+      /* Retrieve the non-missing cut-off values into a macro variable */
+      select A.CutOff into :CutOff separated by ' '
+      from _1AggrProb1_ as A
+      where missing(A.CutOff) eq 0;
+   quit;
+
+   %if (&Debug. eq Y) %then %do;
+      %put NOTE: (&SYSMACRONAME.) nCutOff = &nCutOff.;
+      %put NOTE: (&SYSMACRONAME.) CutOff = &CutOff.;
+   %end;
+
+   /* Add the default (0,0) and (100,100) coordinates, and prepare the output data */
+   data &ROCCoordinates.;
+      CutOffValue = .;
+
+      OneMinusSpecificity = 0;
+      Sensitivity = 0;
+      output;
+
+      OneMinusSpecificity = 100;
+      Sensitivity = 100;
+      output;
+
+      label CutOffValue = 'Cut-off Value';
+      label Sensitivity = 'Sensitivity: Percent of True Positive among Event Observations';
+      label OneMinusSpecificity = '1 - Specificity: Percent of False Positive among Non-Event Observations';
+   run;
+
+   /* Loop over all cut-off values and produce a pair of coordinates for each cut-off value */
+   %do iCutOff = 1 %to &nCutOff.;
+      %let CutOffValue = %scan(&CutOff., &iCutOff., %str( ));
+      %put CutOffValue = &CutOffValue.;
+
+      data Prediction;
+         set &ScoreData. end = eof;
+         where (missing(&EventPredProb.) eq 0);
+
+	 retain TP 0;
+	 retain FP 0;
+	 retain nEvent 0;
+	 retain nNonEvent 0;
+
+	 /* Determine True Positive (TP) and False Positive (FP) */
+	 if (compare(vvalue(&DepVar.), "&EventValue.", 'LI') eq 0) then
+	 do;
+
+	    /* Observed Event */
+            nEvent + 1;
+            if (&EventPredProb. ge &CutOffValue.) then TP = TP + 1;  /* True Positive */
+         end;
+         else
+         do;
+
+            /* Observed Non-Event */
+            nNonEvent + 1;
+            if (&EventPredProb. ge &CutOffValue.) then FP = FP + 1;  /* False Positive */
+         end;
+
+         if (eof eq 1) then
+         do;
+            CutOffValue = &CutOffValue.;
+            OneMinusSpecificity = 100 * (FP / nNonEvent);
+            Sensitivity = 100 * (TP / nEvent);
+            output;
+         end;
+         keep CutOffValue OneMinusSpecificity Sensitivity;
+      run;
+
+      /* Append coordinates to output dataset */
+      proc append base = &ROCCoordinates. data = Prediction;
+      run; 
+   %end;
+
+   /* Get the coordinates in right order, and elimimate duplicated coordinates */
+   proc sort data = &ROCCoordinates. nodupkey;
+      by OneMinusSpecificity Sensitivity;
+   run;
+
+   /* Good housekeeping: remove temporary datasets */
+   %if (&Debug. ne Y) %then %do;
+      proc datasets lib = WORK nolist nowarn noprint;
+         delete _1AggrProb1_;
+      quit;
+   %end;
+
+   /* Report the elapsed time of this macro */
+   %local TimeElapsed;
+   %let TimeElapsed = %sysevalf(%sysfunc(datetime()) - &TimeStart.);
+   %let TimeElapsed = %sysfunc(putn(&TimeElapsed., time12.2-l));
+   %put ;
+   %put NOTE: (&SYSMACRONAME.) Elapsed Time = &TimeElapsed.;
+
+   %if (&Debug. eq Y) %then %do;
+      %put NOTE: (&SYSMACRONAME.) ... Macro Exit;
+   %end;
+
+%mend compute_roc_coordinates;
